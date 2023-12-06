@@ -65,6 +65,11 @@ nltk.download('vader_lexicon')
 from nltk.sentiment.vader import SentimentIntensityAnalyzer
 import re
 from flask_cors import CORS
+from collections import Counter
+import io
+from operator import itemgetter
+import numpy as np
+from nltk.tokenize import word_tokenize
 
 app = Flask(__name__)
 CORS(app)
@@ -142,6 +147,50 @@ def convert_to_wordcloud_neg():
     file_content = file.read().decode('utf-8')
     wordcloud_url = file_to_wordcloud_neg(file_content)
     return jsonify({'wordcloud_url': wordcloud_url})
+
+@app.route('/api/plot', methods=['POST'])
+def plot():
+    # Retrieve text from request
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': 'No file selected'})
+
+    text = file.read().decode('utf-8')
+
+    # Text cleaning and word tokenization
+    words = [word.lower() for word in word_tokenize(text)]
+    words = [word for word in words if word.isalpha()]
+    freq = Counter(words)
+    sorted_freq = sorted(freq.items(), key=itemgetter(1), reverse=True)
+    top_5_words = sorted_freq[:5]
+
+    # Prepare data for plotting
+    words_list = [word[0] for word in top_5_words]
+    frequencies_list = [word[1] for word in top_5_words]
+
+    # Plot
+    fig = plt.figure(figsize=(10,5))
+    plt.bar(words_list, frequencies_list)
+    plt.title('Top 5 Frequently Used Words')
+    plt.xlabel('Words')
+    plt.ylabel('Frequency')
+
+    # Save plot to buffer
+    buf = io.BytesIO()
+    fig.savefig(buf, format='png')
+    buf.seek(0)
+
+    # Convert plot to base64 encoded string
+    plot_base64 = base64.b64encode(buf.read()).decode('utf-8')
+
+    # Create response
+    response = {
+        'plot': plot_base64,
+        'top_5_words': top_5_words
+    }
+
+    return jsonify(response)
+
 
 if __name__ == '__main__':
     app.run(debug=True)
